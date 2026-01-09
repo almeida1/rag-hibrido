@@ -51,7 +51,7 @@ public class ExemploRAGHibrido {
                 System.out.println("\nResultado " + (i + 1) + ":");
                 System.out.println("Texto: " + segment.text().substring(0,
                         Math.min(100, segment.text().length())) + "...");
-                System.out.println("Metadata: " + segment.metadata().asMap());
+                System.out.println("Metadata: " + segment.metadata().toMap());
             }
         }
     }

@@ -10,29 +10,44 @@ import dev.langchain4j.model.embedding.bge.small.en.v15.BgeSmallEnV15EmbeddingMo
 import dev.langchain4j.model.openai.OpenAiEmbeddingModel;
 import dev.langchain4j.store.embedding.EmbeddingMatch;
 
+import dev.langchain4j.store.embedding.EmbeddingSearchRequest;
+import dev.langchain4j.store.embedding.EmbeddingSearchResult;
 import dev.langchain4j.store.embedding.EmbeddingStore;
+import dev.langchain4j.model.chat.ChatLanguageModel;
+import dev.langchain4j.model.openai.OpenAiChatModel;
 import dev.langchain4j.store.embedding.inmemory.InMemoryEmbeddingStore;
+import jakarta.annotation.PreDestroy;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.stereotype.Service;
 import java.util.*;
 
+@Service
 public class HybridRAGSystem {
     private final EmbeddingModel embeddingModel;
     private final EmbeddingStore<TextSegment> embeddingStore;
     private final BM25Retriever bm25Retriever;
     private final DocumentSplitter splitter;
+    private final ChatLanguageModel chatModel;
 
     public HybridRAGSystem() {
-        this.embeddingModel = new BgeSmallEnV15EmbeddingModel();
-        this.embeddingStore = new InMemoryEmbeddingStore<>();
-        this.bm25Retriever = new BM25Retriever();
-        this.splitter = new DocumentByParagraphSplitter(500, 50);
+        this("demo");
     }
 
-    // Construtor com OpenAI
-    public HybridRAGSystem(String openAiApiKey) {
-        this.embeddingModel = OpenAiEmbeddingModel.builder()
-                .apiKey(openAiApiKey)
-                .modelName("text-embedding-3-small")
-                .build();
+    public HybridRAGSystem(@Value("${langchain4j.open-ai.api-key:demo}") String openAiApiKey) {
+        if ("demo".equals(openAiApiKey) || openAiApiKey == null || openAiApiKey.isBlank()) {
+            this.embeddingModel = new BgeSmallEnV15EmbeddingModel();
+            this.chatModel = null; // or a mock/local if available
+        } else {
+            this.embeddingModel = OpenAiEmbeddingModel.builder()
+                    .apiKey(openAiApiKey)
+                    .modelName("text-embedding-3-small")
+                    .build();
+            this.chatModel = OpenAiChatModel.builder()
+                    .apiKey(openAiApiKey)
+                    .modelName("gpt-4o-mini")
+                    .temperature(0.0)
+                    .build();
+        }
         this.embeddingStore = new InMemoryEmbeddingStore<>();
         this.bm25Retriever = new BM25Retriever();
         this.splitter = new DocumentByParagraphSplitter(500, 50);
@@ -55,6 +70,33 @@ public class HybridRAGSystem {
         System.out.println("Documentos carregados: " + documents.size());
     }
 
+    public String answer(String query) {
+        List<TextSegment> contexts = retrieveHybrid(query, 5, 0.5, 0.5);
+
+        if (chatModel == null) {
+            return "Chat model not configured. Contexts found: " + contexts.size();
+        }
+
+        StringBuilder contextBuilder = new StringBuilder();
+        for (TextSegment ctx : contexts) {
+            contextBuilder.append("- ").append(ctx.text()).append("\n\n");
+        }
+
+        String prompt = String.format(
+                "Com base nos seguintes documentos:\n\n%s\n\nResponda de forma concisa e precisa à pergunta: %s",
+                contextBuilder.toString(),
+                query);
+
+        return chatModel.generate(prompt);
+    }
+
+    @PreDestroy
+    public void close() {
+        if (bm25Retriever != null) {
+            bm25Retriever.close();
+        }
+    }
+
     public List<TextSegment> retrieveHybrid(String query, int maxResults,
             double bm25Weight, double embeddingWeight) {
         // Recuperar usando BM25
@@ -62,8 +104,12 @@ public class HybridRAGSystem {
 
         // Recuperar usando embeddings
         Embedding queryEmbedding = embeddingModel.embed(query).content();
-        List<EmbeddingMatch<TextSegment>> embeddingResults = embeddingStore.findRelevant(queryEmbedding,
-                maxResults * 2);
+        EmbeddingSearchRequest searchRequest = EmbeddingSearchRequest.builder()
+                .queryEmbedding(queryEmbedding)
+                .maxResults(maxResults * 2)
+                .build();
+        EmbeddingSearchResult<TextSegment> searchResult = embeddingStore.search(searchRequest);
+        List<EmbeddingMatch<TextSegment>> embeddingResults = searchResult.matches();
 
         // Combinar resultados usando RRF (Reciprocal Rank Fusion)
         return reciprocalRankFusion(bm25Results, embeddingResults, maxResults);

@@ -56,10 +56,10 @@ public class BM25Retriever {
 
             // Adicionar metadados
             if (segment.metadata() != null) {
-                for (Map.Entry<String, String> entry : segment.metadata().asMap().entrySet()) {
+                for (var entry : segment.metadata().toMap().entrySet()) {
                     doc.add(new StringField(
                             "meta_" + entry.getKey(),
-                            entry.getValue(),
+                            entry.getValue().toString(),
                             Field.Store.YES));
                 }
             }
@@ -87,13 +87,13 @@ public class BM25Retriever {
 
             List<TextSegment> results = new ArrayList<>();
             for (ScoreDoc scoreDoc : topDocs.scoreDocs) {
-                Document doc = searcher.doc(scoreDoc.doc);
+                Document doc = searcher.storedFields().document(scoreDoc.doc);
                 String id = doc.get("id");
                 TextSegment segment = idToSegment.get(id);
 
                 // Clonar segment com score
-                Map<String, String> metadataMap = new HashMap<>(segment.metadata().asMap());
-                metadataMap.put("bm25_score", String.valueOf(scoreDoc.score));
+                Map<String, Object> metadataMap = new HashMap<>(segment.metadata().toMap());
+                metadataMap.put("bm25_score", scoreDoc.score);
 
                 results.add(TextSegment.from(segment.text(), Metadata.from(metadataMap)));
             }

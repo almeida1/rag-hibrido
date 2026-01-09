@@ -100,6 +100,18 @@
 			<artifactId>langchain4j-open-ai</artifactId>
 			<version>0.31.0</version>
 			</dependency>
+
+			<!-- Document Parsers for Folder Ingestion -->
+			<dependency>
+				<groupId>dev.langchain4j</groupId>
+				<artifactId>langchain4j-document-parser-apache-pdfbox</artifactId>
+				<version>0.31.0</version>
+			</dependency>
+			<dependency>
+				<groupId>dev.langchain4j</groupId>
+				<artifactId>langchain4j-document-parser-apache-poi</artifactId>
+				<version>0.31.0</version>
+			</dependency>
 			</dependencies>
 			
 

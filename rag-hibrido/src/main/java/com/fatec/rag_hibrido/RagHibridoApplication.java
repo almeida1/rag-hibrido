@@ -5,7 +5,7 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 
 /**
  * RAG Hibrido - Arquitetura: Bi-encoder (para embeddings) + Inverted Index
- * (para BM25).
+ * (para BM25 - Best Match 25).
  * Uso Ideal: Pesquisas em documentos técnicos, jurídicos ou científicos onde
  * tanto o contexto quanto as palavras exatas são críticos para a resposta
  * correta.
