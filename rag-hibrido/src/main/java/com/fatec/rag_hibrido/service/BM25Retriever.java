@@ -23,9 +23,6 @@ import org.apache.lucene.store.Directory;
 
 import dev.langchain4j.data.document.Metadata;
 import dev.langchain4j.data.segment.TextSegment;
-import dev.langchain4j.rag.query.Query;
-import dev.langchain4j.store.embedding.EmbeddingSearchResult;
-import dev.langchain4j.store.embedding.EmbeddingStore;
 
 public class BM25Retriever {
     private final Directory directory;

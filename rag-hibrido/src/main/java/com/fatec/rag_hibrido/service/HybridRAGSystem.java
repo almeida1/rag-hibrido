@@ -73,11 +73,10 @@ public class HybridRAGSystem {
      * Objetivo - Reciprocal Rank Fusion (RRF) - Diferente de um RAG simples que
      * apenas busca e entrega, esta aplicação implementa uma camada de
      * inteligência na combinação dos resultados
-     * O RRF é uma técnica sofisticada que não depende da escala dos scores (que são
+     * O RRF é uma técnica que não depende da escala dos scores (que são
      * diferentes no BM25 e no Cosseno dos Embeddings)
      * para ordenar os resultados, garantindo que documentos que aparecem bem
-     * posicionados
-     * em ambos os métodos subam para o topo da lista final.
+     * posicionados em ambos os métodos subam para o topo da lista final.
      * 
      * @param bm25Results
      * @param embeddingResults
