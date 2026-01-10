@@ -1,4 +1,4 @@
-package com.fatec.rag_hibrido.dto;
+package com.fatec.rag_hibrido.model;
 
 public class QueryRequest {
     private String query;

@@ -1,4 +1,4 @@
-package com.fatec.rag_hibrido.dto;
+package com.fatec.rag_hibrido.model;
 
 import java.util.List;
 

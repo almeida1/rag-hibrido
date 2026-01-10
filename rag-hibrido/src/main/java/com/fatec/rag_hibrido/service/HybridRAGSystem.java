@@ -15,6 +15,7 @@ import dev.langchain4j.store.embedding.EmbeddingSearchResult;
 import dev.langchain4j.store.embedding.EmbeddingStore;
 import dev.langchain4j.model.chat.ChatLanguageModel;
 import dev.langchain4j.model.openai.OpenAiChatModel;
+import dev.langchain4j.model.ollama.OllamaChatModel;
 import dev.langchain4j.store.embedding.inmemory.InMemoryEmbeddingStore;
 import jakarta.annotation.PreDestroy;
 import org.springframework.beans.factory.annotation.Value;
@@ -30,13 +31,26 @@ public class HybridRAGSystem {
     private final ChatLanguageModel chatModel;
 
     public HybridRAGSystem() {
-        this("demo");
+        this("demo", "llama3");
     }
 
-    public HybridRAGSystem(@Value("${langchain4j.open-ai.api-key:demo}") String openAiApiKey) {
+    /**
+     * BGE (BAII General Embedding): Criado pela BAII (Beijing Academy of Artificial
+     * Intelligence).
+     * Small: Indica que é a versão "leve" ou compacta do modelo.
+     * En: Significa English. O modelo foi otimizado para textos em inglês
+     * 
+     * @param openAiApiKey
+     */
+    public HybridRAGSystem(@Value("${langchain4j.open-ai.api-key:demo}") String openAiApiKey,
+            @Value("${ollama.model.name:llama3}") String ollamaModelName) {
         if ("demo".equals(openAiApiKey) || openAiApiKey == null || openAiApiKey.isBlank()) {
             this.embeddingModel = new BgeSmallEnV15EmbeddingModel();
-            this.chatModel = null; // or a mock/local if available
+            this.chatModel = OllamaChatModel.builder()
+                    .baseUrl("http://localhost:11434")
+                    .modelName(ollamaModelName)
+                    .temperature(0.0)
+                    .build();
         } else {
             this.embeddingModel = OpenAiEmbeddingModel.builder()
                     .apiKey(openAiApiKey)
@@ -51,6 +65,13 @@ public class HybridRAGSystem {
         this.embeddingStore = new InMemoryEmbeddingStore<>();
         this.bm25Retriever = new BM25Retriever();
         this.splitter = new DocumentByParagraphSplitter(500, 50);
+
+        System.out.println("SISTEMA RAG INICIALIZADO:");
+        System.out.println("- Embedding Model: "
+                + (embeddingModel instanceof BgeSmallEnV15EmbeddingModel ? "BgeSmallEnV15 (Local)" : "OpenAI"));
+        System.out.println("- Chat Model: "
+                + (chatModel instanceof OllamaChatModel ? "Configurado (Ollama: " + ollamaModelName + ")"
+                        : "Configurado (OpenAI)"));
     }
 
     public void loadDocuments(List<Document> documents) {
@@ -71,10 +92,18 @@ public class HybridRAGSystem {
     }
 
     public String answer(String query) {
+        // Obter contextos com threshold de relevância
         List<TextSegment> contexts = retrieveHybrid(query, 5, 0.5, 0.5);
 
+        // Se não houver contextos relevantes, responder que não sabe
+        if (contexts.isEmpty()) {
+            return "Desculpe, mas não encontrei informações nos documentos carregados para responder a essa pergunta com precisão.";
+        }
+
         if (chatModel == null) {
-            return "Chat model not configured. Contexts found: " + contexts.size();
+            return "Modelo de Chat (LLM) não configurado. Para habilitar respostas completas, configure 'langchain4j.open-ai.api-key' no application.properties.\n\n"
+                    +
+                    "No entanto, encontrei " + contexts.size() + " trechos que podem ser relevantes nos documentos.";
         }
 
         StringBuilder contextBuilder = new StringBuilder();
@@ -83,7 +112,11 @@ public class HybridRAGSystem {
         }
 
         String prompt = String.format(
-                "Com base nos seguintes documentos:\n\n%s\n\nResponda de forma concisa e precisa à pergunta: %s",
+                "Você é um assistente prestativo. Use APENAS os contextos abaixo para responder à pergunta.\n" +
+                        "Se a resposta não estiver nos contextos, diga que não tem informações para responder.\n\n" +
+                        "Contextos:\n%s\n\n" +
+                        "Pergunta: %s\n\n" +
+                        "Resposta:",
                 contextBuilder.toString(),
                 query);
 
@@ -102,14 +135,21 @@ public class HybridRAGSystem {
         // Recuperar usando BM25
         List<TextSegment> bm25Results = bm25Retriever.retrieve(query, maxResults * 2);
 
-        // Recuperar usando embeddings
+        // Recuperar usando embeddings com threshold de similaridade
         Embedding queryEmbedding = embeddingModel.embed(query).content();
         EmbeddingSearchRequest searchRequest = EmbeddingSearchRequest.builder()
                 .queryEmbedding(queryEmbedding)
                 .maxResults(maxResults * 2)
+                .minScore(0.65) // Threshold para evitar resultados totalmente irrelevantes
                 .build();
+
         EmbeddingSearchResult<TextSegment> searchResult = embeddingStore.search(searchRequest);
         List<EmbeddingMatch<TextSegment>> embeddingResults = searchResult.matches();
+
+        // Se nenhum método retornou nada decente, retorna lista vazia
+        if (bm25Results.isEmpty() && embeddingResults.isEmpty()) {
+            return Collections.emptyList();
+        }
 
         // Combinar resultados usando RRF (Reciprocal Rank Fusion)
         return reciprocalRankFusion(bm25Results, embeddingResults, maxResults);

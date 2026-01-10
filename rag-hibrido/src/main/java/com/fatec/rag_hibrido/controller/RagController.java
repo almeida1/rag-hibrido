@@ -1,9 +1,9 @@
 package com.fatec.rag_hibrido.controller;
 
-import com.fatec.rag_hibrido.dto.FolderIngestRequest;
-import com.fatec.rag_hibrido.dto.IngestRequest;
-import com.fatec.rag_hibrido.dto.QueryRequest;
-import com.fatec.rag_hibrido.dto.QueryResponse;
+import com.fatec.rag_hibrido.model.FolderIngestRequest;
+import com.fatec.rag_hibrido.model.IngestRequest;
+import com.fatec.rag_hibrido.model.QueryRequest;
+import com.fatec.rag_hibrido.model.QueryResponse;
 import com.fatec.rag_hibrido.service.HybridRAGSystem;
 import dev.langchain4j.data.document.Document;
 import dev.langchain4j.data.document.Metadata;
@@ -15,9 +15,14 @@ import dev.langchain4j.data.segment.TextSegment;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 @RestController
 @RequestMapping("/api/rag")
@@ -49,21 +54,33 @@ public class RagController {
             List<Document> documents = new ArrayList<>();
             String folder = request.getFolderPath();
 
-            // Carregar documentos de texto
-            documents.addAll(FileSystemDocumentLoader.loadDocuments(folder, new TextDocumentParser()));
+            Path folderPath = Paths.get(folder);
 
-            // Carregar PDFs
-            try {
-                documents.addAll(FileSystemDocumentLoader.loadDocuments(folder, new ApachePdfBoxDocumentParser()));
-            } catch (Exception e) {
-                // Ignorar se não houver PDFs ou erro no parser
+            if (!Files.exists(folderPath) || !Files.isDirectory(folderPath)) {
+                return ResponseEntity.badRequest().body("Caminho inválido ou não é um diretório: " + folder);
             }
 
-            // Carregar Word/Office
-            try {
-                documents.addAll(FileSystemDocumentLoader.loadDocuments(folder, new ApachePoiDocumentParser()));
-            } catch (Exception e) {
-                // Ignorar
+            try (Stream<Path> paths = Files.list(folderPath)) {
+                paths.filter(Files::isRegularFile).forEach(path -> {
+                    try {
+                        String fileName = path.getFileName().toString().toLowerCase();
+                        Document doc = null;
+                        if (fileName.endsWith(".txt")) {
+                            doc = FileSystemDocumentLoader.loadDocument(path, new TextDocumentParser());
+                        } else if (fileName.endsWith(".pdf")) {
+                            doc = FileSystemDocumentLoader.loadDocument(path, new ApachePdfBoxDocumentParser());
+                        } else if (fileName.endsWith(".doc") || fileName.endsWith(".docx")) {
+                            doc = FileSystemDocumentLoader.loadDocument(path, new ApachePoiDocumentParser());
+                        }
+
+                        if (doc != null) {
+                            documents.add(doc);
+                        }
+                    } catch (Exception e) {
+                        // Logar erro para arquivou específico mas continuar com os outros
+                        System.err.println("Erro ao carregar documento " + path + ": " + e.getMessage());
+                    }
+                });
             }
 
             if (documents.isEmpty()) {
