@@ -1,5 +1,7 @@
 package com.fatec.rag_hibrido.controller;
 
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import com.fatec.rag_hibrido.model.FolderIngestRequest;
 import com.fatec.rag_hibrido.model.IngestRequest;
 import com.fatec.rag_hibrido.model.QueryRequest;
@@ -29,6 +31,7 @@ import java.util.stream.Stream;
 public class RagController {
 
     private final HybridRAGSystem ragSystem;
+    Logger logger = LogManager.getLogger(this.getClass());
 
     public RagController(HybridRAGSystem ragSystem) {
         this.ragSystem = ragSystem;
@@ -36,6 +39,7 @@ public class RagController {
 
     @PostMapping("/ingest")
     public ResponseEntity<String> ingest(@RequestBody IngestRequest request) {
+        logger.info(">>>>>> Controller - Ingesting documents iniciada");
         List<Document> documents = request.getDocuments().stream()
                 .map(docDto -> {
                     Metadata metadata = docDto.getMetadata() != null ? Metadata.from(docDto.getMetadata())
@@ -50,6 +54,7 @@ public class RagController {
 
     @PostMapping("/ingest/folder")
     public ResponseEntity<String> ingestFolder(@RequestBody FolderIngestRequest request) {
+        logger.info(">>>>>> Controller - Ingesting documents from folder iniciada");
         try {
             List<Document> documents = new ArrayList<>();
             String folder = request.getFolderPath();
@@ -61,6 +66,7 @@ public class RagController {
             }
 
             try (Stream<Path> paths = Files.list(folderPath)) {
+                logger.info(">>>>>> Controller - Ingesting folder selecionando o tipo de arquivo");
                 paths.filter(Files::isRegularFile).forEach(path -> {
                     try {
                         String fileName = path.getFileName().toString().toLowerCase();
@@ -96,6 +102,7 @@ public class RagController {
 
     @PostMapping("/query")
     public ResponseEntity<QueryResponse> query(@RequestBody QueryRequest request) {
+        logger.info(">>>>>> Controller - Query iniciada");
         String answer = ragSystem.answer(request.getQuery());
         List<TextSegment> contexts = ragSystem.retrieveHybrid(request.getQuery(), 3, 0.5, 0.5);
 

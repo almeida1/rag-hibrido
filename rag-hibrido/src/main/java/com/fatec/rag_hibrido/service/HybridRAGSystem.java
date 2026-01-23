@@ -18,6 +18,9 @@ import dev.langchain4j.model.openai.OpenAiChatModel;
 import dev.langchain4j.model.ollama.OllamaChatModel;
 import dev.langchain4j.store.embedding.inmemory.InMemoryEmbeddingStore;
 import jakarta.annotation.PreDestroy;
+
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import java.util.*;
@@ -29,49 +32,40 @@ public class HybridRAGSystem {
     private final BM25Retriever bm25Retriever;
     private final DocumentSplitter splitter;
     private final ChatLanguageModel chatModel;
+    Logger logger = LogManager.getLogger(this.getClass());
 
-    public HybridRAGSystem() {
-        this("demo", "llama3");
-    }
+    public HybridRAGSystem(
+            @Value("${rag.llm.provider:ollama}") String provider,
+            @Value("${rag.llm.model-name:qwen3:4b}") String modelName,
+            @Value("${rag.llm.api-key:demo}") String apiKey,
+            @Value("${rag.llm.base-url:http://127.0.0.1:11434}") String baseUrl,
+            @Value("${rag.llm.timeout-seconds:300}") Integer timeoutSeconds) {
 
-    /**
-     * BGE (BAII General Embedding): Criado pela BAII (Beijing Academy of Artificial
-     * Intelligence).
-     * Small: Indica que é a versão "leve" ou compacta do modelo.
-     * En: Significa English. O modelo foi otimizado para textos em inglês
-     * 
-     * @param openAiApiKey
-     */
-    public HybridRAGSystem(@Value("${langchain4j.open-ai.api-key:demo}") String openAiApiKey,
-            @Value("${ollama.model.name:llama3}") String ollamaModelName) {
-        if ("demo".equals(openAiApiKey) || openAiApiKey == null || openAiApiKey.isBlank()) {
-            this.embeddingModel = new BgeSmallEnV15EmbeddingModel();
-            this.chatModel = OllamaChatModel.builder()
-                    .baseUrl("http://localhost:11434")
-                    .modelName(ollamaModelName)
-                    .temperature(0.0)
-                    .build();
-        } else {
-            this.embeddingModel = OpenAiEmbeddingModel.builder()
-                    .apiKey(openAiApiKey)
-                    .modelName("text-embedding-3-small")
-                    .build();
+        this.embeddingModel = new BgeSmallEnV15EmbeddingModel();
+
+        if ("openai".equalsIgnoreCase(provider.trim())) {
             this.chatModel = OpenAiChatModel.builder()
-                    .apiKey(openAiApiKey)
-                    .modelName("gpt-4o-mini")
+                    .apiKey(apiKey)
+                    .modelName(modelName)
+                    .timeout(java.time.Duration.ofSeconds(timeoutSeconds))
                     .temperature(0.0)
                     .build();
+            logger.info(">>>>>> HybridRAGSystem - Chat Model: OpenAI (" + modelName + ")");
+        } else {
+            this.chatModel = OllamaChatModel.builder()
+                    .baseUrl(baseUrl)
+                    .modelName(modelName)
+                    .timeout(java.time.Duration.ofSeconds(timeoutSeconds))
+                    .temperature(0.0)
+                    .build();
+            logger.info(">>>>>> HybridRAGSystem - Chat Model: Ollama (" + modelName + " em " + baseUrl + ")");
         }
+
         this.embeddingStore = new InMemoryEmbeddingStore<>();
         this.bm25Retriever = new BM25Retriever();
         this.splitter = new DocumentByParagraphSplitter(500, 50);
-
-        System.out.println("SISTEMA RAG INICIALIZADO:");
-        System.out.println("- Embedding Model: "
-                + (embeddingModel instanceof BgeSmallEnV15EmbeddingModel ? "BgeSmallEnV15 (Local)" : "OpenAI"));
-        System.out.println("- Chat Model: "
-                + (chatModel instanceof OllamaChatModel ? "Configurado (Ollama: " + ollamaModelName + ")"
-                        : "Configurado (OpenAI)"));
+        logger.info(">>>>>> HybridRAGSystem - Iniciado");
+        logger.info(">>>>>> HybridRAGSystem - Embedding Model: BgeSmallEnV15 (Local)");
     }
 
     public void loadDocuments(List<Document> documents) {
@@ -88,7 +82,7 @@ public class HybridRAGSystem {
                 embeddingStore.add(embedding, segment);
             }
         }
-        System.out.println("Documentos carregados: " + documents.size());
+        logger.info(">>>>>> HybridRAGSystem - Documentos carregados: " + documents.size());
     }
 
     public String answer(String query) {
@@ -97,7 +91,7 @@ public class HybridRAGSystem {
 
         // Se não houver contextos relevantes, responder que não sabe
         if (contexts.isEmpty()) {
-            return "Desculpe, mas não encontrei informações nos documentos carregados para responder a essa pergunta com precisão.";
+            return "Não tenho informações para responder";
         }
 
         if (chatModel == null) {
@@ -120,7 +114,18 @@ public class HybridRAGSystem {
                 contextBuilder.toString(),
                 query);
 
-        return chatModel.generate(prompt);
+        try {
+            return chatModel.generate(prompt);
+        } catch (Exception e) {
+            String errorMessage = e.getMessage() != null ? e.getMessage() : "";
+            if (errorMessage.contains("404") || errorMessage.toLowerCase().contains("not found")) {
+                return "Erro: O modelo de linguagem (LLM) não foi encontrado ou não está disponível. " +
+                        "Verifique se o Ollama está rodando e se o modelo está baixado (ollama pull "
+                        + (chatModel instanceof OllamaChatModel ? "modelo" : "qwen3:4b") + "). Detalhes: "
+                        + errorMessage;
+            }
+            return "Erro ao gerar resposta com o modelo de linguagem: " + errorMessage;
+        }
     }
 
     @PreDestroy

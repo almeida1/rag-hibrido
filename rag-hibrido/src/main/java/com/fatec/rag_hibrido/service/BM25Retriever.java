@@ -72,6 +72,9 @@ public class BM25Retriever {
 
     public List<TextSegment> retrieve(String query, int maxResults) {
         try {
+            if (!DirectoryReader.indexExists(directory)) {
+                return new ArrayList<>();
+            }
             IndexReader reader = DirectoryReader.open(directory);
             IndexSearcher searcher = new IndexSearcher(reader);
 

@@ -64,7 +64,7 @@ public class ExemploRAGHibrido {
                 // Usando OpenAI para embeddings e geração
                 String openAiApiKey = "demo"; // Configure sua chave
 
-                HybridRAGSystem ragSystem = new HybridRAGSystem(openAiApiKey, "llama3");
+                HybridRAGSystem ragSystem = new HybridRAGSystem("openai", "gpt-4o-mini", openAiApiKey, "", 60);
 
                 // Configurar LLM para geração
                 OpenAiChatModel llm = OpenAiChatModel.builder()
