@@ -11,9 +11,8 @@ import java.util.List;
 public class ExemploRAGHibrido {
         public static void main(String[] args) {
                 // 1. Criar sistema RAG
-                HybridRAGSystem ragSystem = new HybridRAGSystem();
-
-                // 2. Criar documentos de exemplo
+                HybridRAGSystem ragSystem = new HybridRAGSystem(
+                                "ollama", "qwen3:4b", "demo", "http://127.0.0.1:11434", 300);
                 List<Document> documents = Arrays.asList(
                                 Document.from("A inteligência artificial está transformando a medicina.",
                                                 Metadata.from("fonte", "artigo_ciencia").put("ano", "2023")),
