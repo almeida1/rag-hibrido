@@ -4,16 +4,16 @@ import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 
 /**
- * RAG Hibrido - Arquitetura: Bi-encoder (para embeddings) + Inverted Index
- * (BM25 - Best Match 25).
- * Uso Ideal: Pesquisas em documentos técnicos, jurídicos ou científicos onde
- * tanto o contexto quanto as palavras exatas são críticos para a resposta
- * correta.
- * A arquitetura do sistema resolve os dois problemas principais do RAG ingênuo:
- * 1. Baixa Precisão em Termos Específicos: Resolvido pelo BM25.
- * 2. Perda de Contexto Semântico: Resolvido pelos Embeddings
- * O sistema usa o BGE Small (local) para criar os índices de busca e o Llama 3
- * (local via Ollama) para gerar as respostas finais.
+ * O objetivo da biblioteca LangChain4j é simplificar a integração de LLMs em
+ * aplicações Java.
+ * O conhecimento do LLM é limitado aos dados com os quais ele foi treinado.
+ * Se o projeto necessita que o LLM tenha conhecimento específico da área ou
+ * dados proprietários, é possivel:
+ * -Usar o método RAG (Geração Aumentada por Recuperação).
+ * Ajuste fino do LLM com os dados.
+ * Combinar o método RAG com o ajuste fino.
+ * O processo RAG é dividido em duas etapas distintas: indexação e recuperação.
+ * O LangChain4j fornece ferramentas para ambas as etapas.
  */
 @SpringBootApplication
 public class RagHibridoApplication {

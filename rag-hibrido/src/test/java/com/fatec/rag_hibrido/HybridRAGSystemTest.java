@@ -12,9 +12,24 @@ import static org.junit.jupiter.api.Assertions.*;
 import java.util.Arrays;
 import java.util.List;
 
+/**
+ * Objetivo - Testes unitários e de integração para o sistema HybridRAGSystem.
+ * Esta classe valida o comportamento da busca híbrida e do algoritmo de fusão
+ * de resultados, garantindo que o sistema recupere as informações corretas.
+ */
 public class HybridRAGSystemTest {
+        /**
+         * Objetivo - Validar a funcionalidade de recuperação híbrida processada
+         * localmente
+         * pelas bibliotecas LangChain4J e Lucene (mecanismo de busca híbrida).
+         * Nao valida a resposta do modelo de linguagem ampla (neste exemplo Ollama)
+         * Testa se o sistema consegue ingerir documentos e retornar o número correto
+         * de resultados relevantes para uma consulta específica, combinando os pesos
+         * de BM25 e Embeddings. O sistema consegue encontrar os documentos corretos
+         * no banco de dados local da memória.
+         */
         @Test
-        public void testRetrieveHybrid() {
+        public void ct01_req01_testRetrieveHybrid() {
                 HybridRAGSystem ragSystem = new HybridRAGSystem("ollama", "qwen3:4b", "demo", "http://127.0.0.1:11434",
                                 1);
                 List<Document> documents = Arrays.asList(
@@ -36,10 +51,19 @@ public class HybridRAGSystemTest {
                                 0.5 // embeddingWeight
                 );
                 assertEquals(3, resultados.size());
+                // teste E2E
+                // String resposta = ragSystem.answer("O que é inteligência artificial?");
+                // assertNotNull(resposta);
         }
 
+        /**
+         * Objetivo - Testar a lógica de fusão de rankings (RRF).
+         * Verifica se o sistema consegue processar documentos carregados e realizar
+         * a fusão de resultados de forma consistente, garantindo que a lista final
+         * de segmentos não esteja vazia e contenha dados válidos.
+         */
         @Test
-        void testReciprocalRankFusion() {
+        void ct02_req02_testReciprocalRankFusion() {
                 // Testar lógica de fusão
                 HybridRAGSystem rag = new HybridRAGSystem("ollama", "qwen3:4b", "demo", "http://127.0.0.1:11434", 1);
 

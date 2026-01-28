@@ -24,6 +24,17 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import java.util.*;
 
+/**
+ * Objetivo - Sistema de RAG (Geração Aumentada por Recuperação) híbrido.
+ * Esta classe gerencia a ingestão de documentos, a recuperação de contextos
+ * usando busca híbrida (BM25 + Vetorial) e a geração de respostas
+ * fundamentadas através de modelos de linguagem (LLM).
+ * Ingestão em memória, não persistente, diminui o investimento em hardware.
+ * 
+ * @author Fatec
+ * @version 1.0
+ * @since 2026-01-24
+ */
 @Service
 public class HybridRAGSystem {
     private final EmbeddingModel embeddingModel;
@@ -33,14 +44,25 @@ public class HybridRAGSystem {
     private final ChatLanguageModel chatModel;
     Logger logger = LogManager.getLogger(this.getClass());
 
+    /**
+     * Objetivo - Construtor do sistema RAG híbrido.
+     * Inicializa os modelos de embedding e chat, configura os vetores
+     * e os retrievers necessários para o funcionamento do sistema.
+     * 
+     * @param provider       O provedor do modelo de linguagem (openai ou ollama).
+     * @param modelName      O nome do modelo a ser utilizado.
+     * @param apiKey         A chave de API (para OpenAI).
+     * @param baseUrl        A URL base do serviço (para Ollama).
+     * @param timeoutSeconds O tempo máximo de espera para respostas do modelo.
+     */
     public HybridRAGSystem(
             @Value("${rag.llm.provider:ollama}") String provider,
             @Value("${rag.llm.model-name:qwen3:4b}") String modelName,
             @Value("${rag.llm.api-key:demo}") String apiKey,
             @Value("${rag.llm.base-url:http://127.0.0.1:11434}") String baseUrl,
             @Value("${rag.llm.timeout-seconds:300}") Integer timeoutSeconds) {
-
-        this.embeddingModel = new BgeSmallEnV15EmbeddingModel();
+        logger.info(">>>>>> HybridRAGSystem - Iniciado");
+        this.embeddingModel = new BgeSmallEnV15EmbeddingModel(); // Embedding Model BGE Small open source
 
         if ("openai".equalsIgnoreCase(provider.trim())) {
             this.chatModel = OpenAiChatModel.builder()
@@ -63,10 +85,17 @@ public class HybridRAGSystem {
         this.embeddingStore = new InMemoryEmbeddingStore<>();
         this.bm25Retriever = new BM25Retriever();
         this.splitter = new DocumentByParagraphSplitter(500, 50);
-        logger.info(">>>>>> HybridRAGSystem - Iniciado");
         logger.info(">>>>>> HybridRAGSystem - Embedding Model: BgeSmallEnV15 (Local)");
     }
 
+    /**
+     * Objetivo - Carregar e processar uma lista de documentos no sistema.
+     * Divide os documentos em parágrafos, gera embeddings para cada segmento e
+     * os indexa tanto no buscador BM25 quanto no mecanismo de armazenamento de
+     * vetores.
+     * 
+     * @param documents Lista de documentos a serem ingeridos.
+     */
     public void loadDocuments(List<Document> documents) {
         for (Document doc : documents) {
             // Dividir documento em segmentos
@@ -84,6 +113,15 @@ public class HybridRAGSystem {
         logger.info(">>>>>> HybridRAGSystem - Documentos carregados: " + documents.size());
     }
 
+    /**
+     * Objetivo - Responder a uma pergunta baseada nos documentos carregados.
+     * Recupera os contextos mais relevantes através de busca híbrida e utiliza
+     * o modelo de linguagem para gerar uma resposta fundamentada.
+     * 
+     * @param query A pergunta feita pelo usuário.
+     * @return A resposta gerada pelo modelo ou uma mensagem de
+     *         erro/indisponibilidade.
+     */
     public String answer(String query) {
         // Obter contextos com threshold de relevância
         List<TextSegment> contexts = retrieveHybrid(query, 5, 0.5, 0.5);
@@ -127,6 +165,11 @@ public class HybridRAGSystem {
         }
     }
 
+    /**
+     * Objetivo - Liberar recursos antes da destruição do objeto.
+     * Fecha o retriever BM25 para garantir que os arquivos de índice sejam
+     * liberados corretamente.
+     */
     @PreDestroy
     public void close() {
         if (bm25Retriever != null) {
@@ -134,6 +177,20 @@ public class HybridRAGSystem {
         }
     }
 
+    /**
+     * Objetivo - Realizar uma busca híbrida combinando léxico (BM25) e semântico
+     * (Embeddings).
+     * Executa ambas as buscas e funde os resultados para obter o melhor de dois
+     * mundos:
+     * precisão de palavras-chave e compreensão de contexto.
+     * 
+     * @param query           A consulta de busca.
+     * @param maxResults      Número máximo de resultados a retornar.
+     * @param bm25Weight      Peso atribuído à busca léxica (usado em fusão linear).
+     * @param embeddingWeight Peso atribuído à busca semântica (usado em fusão
+     *                        linear).
+     * @return Lista de segmentos de texto mais relevantes.
+     */
     public List<TextSegment> retrieveHybrid(String query, int maxResults,
             double bm25Weight, double embeddingWeight) {
         // Recuperar usando BM25
@@ -160,18 +217,15 @@ public class HybridRAGSystem {
     }
 
     /**
-     * Objetivo - Reciprocal Rank Fusion (RRF) - Diferente de um RAG simples que
-     * apenas busca e entrega, esta aplicação implementa uma camada de
-     * inteligência na combinação dos resultados
-     * O RRF é uma técnica que não depende da escala dos scores (que são
-     * diferentes no BM25 e no Cosseno dos Embeddings)
-     * para ordenar os resultados, garantindo que documentos que aparecem bem
-     * posicionados em ambos os métodos subam para o topo da lista final.
+     * Objetivo - Fusão de Rankings Recíprocos (RRF).
+     * Combina os rankings de diferentes métodos de busca sem depender da escala
+     * dos scores originais. Favorece documentos que aparecem bem posicionados
+     * em múltiplas fontes de busca.
      * 
-     * @param bm25Results
-     * @param embeddingResults
-     * @param maxResults
-     * @return
+     * @param bm25Results      Resultados da busca léxica.
+     * @param embeddingResults Resultados da busca por similaridade de vetores.
+     * @param maxResults       Número de resultados finais desejados.
+     * @return Lista consolidada e reordenada de segmentos.
      */
     private List<TextSegment> reciprocalRankFusion(
             List<TextSegment> bm25Results,
@@ -221,7 +275,24 @@ public class HybridRAGSystem {
         return results;
     }
 
-    // Método de fusão linear alternativa
+    /**
+     * Objetivo - Metodo de recuperacao alternativo - Fusão Linear de Scores.
+     * Quando os pesos são iguais, a fusão linear é idêntica ao RRF.
+     * Combina os resultados normalizando os scores originais e aplicando pesos
+     * definidos pelo usuário para cada modalidade de busca.
+     * O especialista de domínio pode ajustar os pesos para favorecer uma modalidade
+     * de busca sobre a outra - em doc técnicos, com muitos codigos de erros ou
+     * siglas especificas
+     * por exemplo, pode-se favorecer a busca por semântica,
+     * dar peso 0.8 para BM25 e 0.2 para Embeddings.
+     * 
+     * @param bm25Results      Resultados BM25.
+     * @param embeddingResults Resultados de Embeddings.
+     * @param maxResults       Limite de resultados.
+     * @param bm25Weight       Peso da busca BM25.
+     * @param embeddingWeight  Peso da busca de embeddings.
+     * @return Lista de segmentos ordenada por score ponderado.
+     */
     private List<TextSegment> linearFusion(
             List<TextSegment> bm25Results,
             List<EmbeddingMatch<TextSegment>> embeddingResults,
@@ -272,6 +343,9 @@ public class HybridRAGSystem {
                 .collect(java.util.stream.Collectors.toList());
     }
 
+    /**
+     * Objetivo - Estrutura auxiliar para cálculo de fusão de scores.
+     */
     private static class FusionScore {
         double bm25Score;
         double embeddingScore;

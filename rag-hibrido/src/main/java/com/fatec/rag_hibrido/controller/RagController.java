@@ -53,7 +53,7 @@ public class RagController {
 
     @PostMapping("/ingest/folder")
     public ResponseEntity<String> ingestFolder(@RequestBody FolderIngestRequest request) {
-        logger.info(">>>>>> Controller - Ingesting documents from folder iniciada");
+        logger.info(">>>>>> Controller - Ingesting folder iniciado");
         try {
             List<Document> documents = new ArrayList<>();
             String folder = request.getFolderPath();
@@ -82,7 +82,7 @@ public class RagController {
                             documents.add(doc);
                         }
                     } catch (Exception e) {
-                        // Logar erro para arquivou específico mas continuar com os outros
+                        // Logar erro para arquivo específico mas continuar com os outros
                         System.err.println("Erro ao carregar documento " + path + ": " + e.getMessage());
                     }
                 });
